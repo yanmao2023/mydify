@@ -190,6 +190,12 @@ class HttpRequestNode(BaseNode[HttpRequestNodeData]):
         mime_type = (
             content_disposition_type or content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
         )
+        
+        # 如果mime_type是application/octet-stream，尝试从文件内容检测实际类型
+        if mime_type == "application/octet-stream" and content:
+            detected_mime_type = self._detect_content_type(content)
+            if detected_mime_type:
+                mime_type = detected_mime_type
 
         tool_file = ToolFileManager.create_file_by_raw(
             user_id=self.user_id,
@@ -210,3 +216,41 @@ class HttpRequestNode(BaseNode[HttpRequestNodeData]):
         files.append(file)
 
         return files
+        
+    @staticmethod
+    def _detect_content_type(content: bytes) -> Optional[str]:
+        """
+        通过检查文件内容的魔数来检测文件类型
+        """
+        if not content:
+            return None
+            
+        # 图像文件类型检测
+        if content.startswith(b'\xFF\xD8\xFF'):
+            return 'image/jpeg'
+        elif content.startswith(b'\x89PNG\r\n\x1a\n'):
+            return 'image/png'
+        elif content.startswith(b'GIF87a') or content.startswith(b'GIF89a'):
+            return 'image/gif'
+        elif content.startswith(b'RIFF') and content[8:12] == b'WEBP':
+            return 'image/webp'
+        elif content.startswith(b'BM'):
+            return 'image/bmp'
+            
+        # 文档类型检测
+        elif content.startswith(b'%PDF'):
+            return 'application/pdf'
+        elif content.startswith(b'PK\x03\x04'):
+            return 'application/zip'
+        elif content.startswith(b'\x25\x21PS-Adobe'):
+            return 'application/postscript'
+            
+        # 音频/视频类型检测
+        elif content.startswith(b'ID3') or content.startswith(b'\xFF\xFB'):
+            return 'audio/mpeg'
+        elif content.startswith(b'RIFF') and content[8:12] == b'WAVE':
+            return 'audio/wav'
+        elif content.startswith(b'\x00\x00\x00\x14ftyp'):
+            return 'video/mp4'
+            
+        return None
